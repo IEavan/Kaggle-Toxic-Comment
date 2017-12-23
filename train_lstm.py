@@ -4,13 +4,15 @@ of toxic comments from wikipedia
 
 #TODO
 #  -- add model saving and loading § DONE
-#  -- add data_cleaning
+#  -- add data_cleaning § PARTIAL
 #  -- add create submission file
 #  -- lr scheduler
 
 import pandas as pd
 import torch
 from torch.autograd import Variable
+
+import string
 
 # Read data
 frame = pd.read_csv("train.csv")
@@ -22,13 +24,15 @@ EPOCHS = 1
 STOP_EARLY = 50
 HIDDEN_DIM = 20
 MODEL_PATH="parameters"
+ALLOWED_CHARS = string.ascii_letters + string.digits + string.punctuation + " "
 
 print("Reading Comments...")
 CHAR_DICT = {}
 for comment in frame["comment_text"]:
     for char in comment:
-        if char not in CHAR_DICT:
+        if char not in CHAR_DICT and char in ALLOWED_CHARS:
             CHAR_DICT[char] = len(CHAR_DICT)
+CHAR_DICT["unknown"] = len(CHAR_DICT)
 
 # Create train and test split (80/20)
 split_num = int(len(frame) * SPLIT_RATIO)
@@ -62,7 +66,10 @@ class charLSTM(torch.nn.Module):
 
 # Helper Functions
 def char2vec(char):
-    index = CHAR_DICT[char]
+    if char in ALLOWED_CHARS:
+        index = CHAR_DICT[char]
+    else:
+        index = CHAR_DICT["unknown"]
     vec = torch.zeros(len(CHAR_DICT))
     vec[index] = 1
     return vec
@@ -105,7 +112,7 @@ def load_model(model, path=MODEL_PATH):
 if __name__ == "__main__":
     model = charLSTM(CHAR_DICT, HIDDEN_DIM)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
     load_model(model)
     train = train.sample(frac=1)
     print("Training...")
@@ -132,7 +139,8 @@ if __name__ == "__main__":
             model.zero_grad()
 
             if (iteration + 1) % 5 is 0:
-                print("Training loss at iter {} is {:.3}".format(iteration, sum(losses) / 5))
+                print("Training loss at iter {} is {:.3}"
+                        .format(iteration + 1, sum(losses) / 5))
                 losses = []
     save_model(model)
 
