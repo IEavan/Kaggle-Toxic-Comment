@@ -14,55 +14,29 @@ from torch.autograd import Variable
 
 import string
 
-# Read data
-frame = pd.read_csv("train.csv")
-frame = frame.sample(frac=1)
-
 # Constants
 SPLIT_RATIO = 0.8
 EPOCHS = 1
 STOP_EARLY = 50
-HIDDEN_DIM = 20
-MODEL_PATH="parameters"
 ALLOWED_CHARS = string.ascii_letters + string.digits + string.punctuation + " "
-
-print("Reading Comments...")
 CHAR_DICT = {}
-for comment in frame["comment_text"]:
-    for char in comment:
-        if char not in CHAR_DICT and char in ALLOWED_CHARS:
-            CHAR_DICT[char] = len(CHAR_DICT)
+for char in ALLOWED_CHARS:
+    CHAR_DICT[char] = len(CHAR_DICT)
 CHAR_DICT["unknown"] = len(CHAR_DICT)
 
+# Read data
+def read_data(path="train.csv"):
+    frame = pd.read_csv(path)
+    frame = frame.sample(frac=1)
+    return frame
+
 # Create train and test split (80/20)
-split_num = int(len(frame) * SPLIT_RATIO)
-train = frame[:split_num]
-test  = frame[split_num:]
+def create_split(frame, split_ratio=SPLIT_RATIO):
+    split_num = int(len(frame) * split_ratio)
+    train = frame[:split_num]
+    test  = frame[split_num:]
+    return train, test
 
-# Define Model
-class charLSTM(torch.nn.Module):
-    def __init__(self, char_dict, hidden_dim, layers=3,
-                 dropout=0.2, bi_dir=False, output_dim=6):
-        super(charLSTM, self).__init__()
-        self.char_dict = char_dict
-
-        self.lstm = torch.nn.LSTM(len(char_dict), hidden_dim, num_layers=layers,
-                                  batch_first=True, dropout=dropout, bidirectional=bi_dir)
-        self.linear = torch.nn.Linear(hidden_dim * layers, output_dim)
-
-    def forward(self, comment):
-        """ Takes in a Variable of shape [batch, sequence, one_hot_char]
-        and uses a character level lstm to predict the probalities of
-        each output class. Returns a variable of shape [batch, classes]
-        """
-
-        batch_size = comment.size(0)
-        _, (_, hidden_state) = self.lstm(comment)
-        hidden_state = hidden_state.view(batch_size, -1)
-        logits = self.linear(hidden_state)
-        predictions = torch.nn.functional.sigmoid(logits)
-
-        return predictions
 
 # Helper Functions
 def char2vec(char):
@@ -98,22 +72,17 @@ def parse_row(row):
                row["threat"], row["insult"], row["identity_hate"]]
     return comment, classes
 
-def save_model(model, path=MODEL_PATH):
-    torch.save(model.state_dict(), path)
-
-def load_model(model, path=MODEL_PATH):
-    try:
-        model.load_state_dict(torch.load(path))
-        print("Parameters loaded")
-    except FileNotFoundError:
-        print("Parameter file not found at '{}'".format(path))
-        print("Starting with new parameters")
 
 if __name__ == "__main__":
-    model = charLSTM(CHAR_DICT, HIDDEN_DIM)
+    # Read data
+    print("Reading data")
+    train, test = create_split(read_data())
+
+    import models as m
+    model = m.CharLSTM(CHAR_DICT, m.HIDDEN_DIM)
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
-    load_model(model)
+    m.load_model(model)
     train = train.sample(frac=1)
     print("Training...")
     for epoch in range(EPOCHS):
@@ -142,5 +111,7 @@ if __name__ == "__main__":
                 print("Training loss at iter {} is {:.3}"
                         .format(iteration + 1, sum(losses) / 5))
                 losses = []
-    save_model(model)
+
+    print("Saving model to '{}'".format(m.MODEL_PATH))
+    m.save_model(model)
 
