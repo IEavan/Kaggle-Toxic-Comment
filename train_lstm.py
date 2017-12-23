@@ -2,6 +2,12 @@
 of toxic comments from wikipedia
 """
 
+#TODO
+#  -- add model saving and loading § DONE
+#  -- add data_cleaning
+#  -- add create submission file
+#  -- lr scheduler
+
 import pandas as pd
 import torch
 from torch.autograd import Variable
@@ -13,8 +19,9 @@ frame = frame.sample(frac=1)
 # Constants
 SPLIT_RATIO = 0.8
 EPOCHS = 1
-STOP_EARLY = 100
+STOP_EARLY = 50
 HIDDEN_DIM = 20
+MODEL_PATH="parameters"
 
 print("Reading Comments...")
 CHAR_DICT = {}
@@ -69,14 +76,14 @@ def comment2tensor(comment_string, output_var=True):
         comment = Variable(comment)
     return comment
 
-def make_batch(comment_list, output_var=True):
-    tensor_list = []
-    for comment in comment_list:
-        tensor_list.append(comment2tensor(comment, output_var=False))
-    batch = torch.stack(tensor_list)
-    if output_var:
-        batch = Variable(batch)
-    return batch
+# def make_batch(comment_list, output_var=True):
+#     tensor_list = []
+#     for comment in comment_list:
+#         tensor_list.append(comment2tensor(comment, output_var=False))
+#     batch = torch.stack(tensor_list)
+#     if output_var:
+#         batch = Variable(batch)
+#     return batch
 
 def parse_row(row):
     comment = row["comment_text"]
@@ -84,10 +91,23 @@ def parse_row(row):
                row["threat"], row["insult"], row["identity_hate"]]
     return comment, classes
 
+def save_model(model, path=MODEL_PATH):
+    torch.save(model.state_dict(), path)
+
+def load_model(model, path=MODEL_PATH):
+    try:
+        model.load_state_dict(torch.load(path))
+        print("Parameters loaded")
+    except FileNotFoundError:
+        print("Parameter file not found at '{}'".format(path))
+        print("Starting with new parameters")
+
 if __name__ == "__main__":
     model = charLSTM(CHAR_DICT, HIDDEN_DIM)
     criterion = torch.nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = torch.optim.SGD(model.parameters(), lr=5e-4)
+    load_model(model)
+    train = train.sample(frac=1)
     print("Training...")
     for epoch in range(EPOCHS):
         losses = []
@@ -111,7 +131,8 @@ if __name__ == "__main__":
             optimizer.step()
             model.zero_grad()
 
-            if iteration % 5 is 4:
+            if (iteration + 1) % 5 is 0:
                 print("Training loss at iter {} is {:.3}".format(iteration, sum(losses) / 5))
                 losses = []
+    save_model(model)
 
